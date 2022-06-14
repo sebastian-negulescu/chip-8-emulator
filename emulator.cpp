@@ -2,9 +2,6 @@
 
 int main() {
     chip8 cpu;
-    while (true) {
-        // fetch
-        // decode
-        // execute
-    }
+    std::cout << cpu.load_program("glitchGhost.ch8") << std::endl;
+    cpu.execute_cycle();
 }

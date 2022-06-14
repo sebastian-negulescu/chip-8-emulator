@@ -1,0 +1,4 @@
+emulator
+emulator.dSYM
+*.o
+*.ch8
