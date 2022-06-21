@@ -8,13 +8,16 @@ chip8::chip8() {
     for (uint8_t i = 0; i < DISPLAY_WIDTH; ++i) {
         this->display[i] = new bool[DISPLAY_HEIGHT];
     }
-    this->keyboard = new bool[KEYS];
+    this->keyboard = new bool[NUM_KEYS];
+
+    distribution = std::uniform_int_distribution<int> (0x0, 0xFF);
 
     this->initialize();
 }
 
 void chip8::initialize() {
     // clear all the arrays
+    this->draw = false;
     this->clear_display();
     this->clear_keyboard();
     this->clear_memory();
@@ -38,13 +41,17 @@ bool chip8::load_program(std::string filename) {
     long size = 0;
     uint8_t *buffer;
 
-    size = program_file.tellg();
+    if (program_file) {
+        size = program_file.tellg();
 
-    program_file.seekg(0, std::ios::beg);
-    buffer = new uint8_t[size];
-    program_file.read((char *)buffer, size);
+        program_file.seekg(0, std::ios::beg);
+        buffer = new uint8_t[size];
+        program_file.read((char *)buffer, size);
 
-    program_file.close();
+        program_file.close();
+    } else {
+        return false;
+    }
 
     // if size > 0x1000 - 0x200, then return false
     uint16_t memory_size = MEMORY_SIZE - PROGRAM_START;
@@ -71,6 +78,89 @@ void chip8::execute_cycle() {
     
     // figure out what to do with the instruction
     this->execute_instruction(instruction);
+
+    // deal with the timers
+    if (this->delay > 0) {
+        this->delay--;
+    }
+
+    if (this->sound > 0) {
+        this->sound--;
+    }
+}
+
+void chip8::draw_sprite(uint8_t x, uint8_t y, uint8_t *sprite, uint8_t size) {
+    this->registers[0xF] = 0;
+
+    for (uint8_t i = 0; i < size; ++i) {
+        for (uint8_t j = 0; j < 8; ++j) {
+            bool pixel = (sprite[i] >> (7 - j)) & 0x01;
+            uint8_t pos_x = x + j >= DISPLAY_WIDTH ? x + j - DISPLAY_WIDTH : x + j;
+            uint8_t pos_y = y + i >= DISPLAY_HEIGHT ? y + i - DISPLAY_HEIGHT : y + i;
+            
+            if (this->display[pos_x][pos_y] && pixel) {
+                this->registers[0xF] = 1; // pixel is erased
+            }
+
+            pixel = pixel ^ this->display[pos_x][pos_y];
+            if (pixel != this->display[pos_x][pos_y]) {
+                // pixel at pos_x,pos_y changed
+                this->draw = true;
+            }
+
+            this->display[pos_x][pos_y] = pixel;
+        }
+    }
+}
+
+void chip8::clear_display() {
+    for (uint8_t i = 0; i < DISPLAY_WIDTH; ++i) {
+        for (uint8_t j = 0; j < DISPLAY_HEIGHT; ++j) {
+            this->display[i][j] = 0;
+        }
+    }
+    // draw the display
+    this->draw = true;
+}
+
+bool **chip8::get_display() {
+    return this->display;
+}
+
+bool chip8::get_draw_flag() {
+    return this->draw;
+}
+
+void chip8::set_draw_flag(bool val) {
+    this->draw = val;
+}
+
+bool *chip8::get_keyboard() {
+    return this->keyboard;
+}
+
+void chip8::clear_keyboard() {
+    for (uint16_t i = 0; i < NUM_KEYS; ++i) {
+        this->keyboard[i] = 0;
+    }
+}
+
+void chip8::clear_memory() {
+    for (uint16_t i = 0; i < MEMORY_SIZE; ++i) {
+        this->memory[i] = 0;
+    }
+}
+
+void chip8::clear_stack() {
+    for (uint8_t i = 0; i < STACK_SIZE; ++i) {
+        this->stack[i] = 0;
+    }
+}
+
+void chip8::clear_registers() {
+    for (uint8_t i = 0; i < REGISTER_SIZE; ++i) {
+        this->registers[i] = 0;
+    }
 }
 
 void chip8::execute_instruction(uint16_t instruction) {
@@ -92,8 +182,8 @@ void chip8::execute_instruction(uint16_t instruction) {
                     this->clear_display();
                     break;
                 case 0x0EE:
-                    this->pc = this->stack[this->sp];
                     this->sp--;
+                    this->pc = this->stack[this->sp];
                     break;
             }
             break;
@@ -160,16 +250,16 @@ void chip8::execute_instruction(uint16_t instruction) {
                     this->registers[a] -= this->registers[b];
                     break;
                 case 6:
-                    this->registers[0xF] = this->registers[a] & 0x01;
-                    this->registers[a] = this->registers[a] >> 1;
+                    this->registers[0xF] = this->registers[ind] & 0x01;
+                    this->registers[ind] = this->registers[ind] >> 1;
                     break;
                 case 7:
                     this->registers[0xF] = this->registers[b] > this->registers[a];
                     this->registers[a] = this->registers[b] - this->registers[a];
                     break;
                 case 0xE:
-                    this->registers[0xF] = this->registers[a] >> 7; 
-                    this->registers[a] = this->registers[a] << 1;
+                    this->registers[0xF] = this->registers[ind] >> 7; 
+                    this->registers[ind] = this->registers[ind] << 1;
                     break;
             }
             break;
@@ -190,21 +280,18 @@ void chip8::execute_instruction(uint16_t instruction) {
 
         case 0xC:
             // replace 1 with random byte
-            this->registers[a] = 0x01 & val;
+            this->registers[ind] = (uint8_t) this->distribution(this->generator);
             break;
 
         case 0xD:
         {
-            bool *sprite = new bool[tail * 8];
+            uint8_t *sprite = new uint8_t[tail];
 
             for (uint8_t i = 0; i < tail; ++i) {
-                uint8_t byte = this->memory[this->I + i]; 
-                for (uint8_t j = 0; j < 8; ++j) {
-                    sprite[i * 8 + j] = (byte << j) & 0x80;
-                }
+                sprite[i] = this->memory[this->I + i];
             }
 
-            this->draw_sprite(a, b, sprite, tail * 8);
+            this->draw_sprite(this->registers[a], this->registers[b], sprite, tail);
 
             delete[] sprite;
             break;
@@ -213,77 +300,67 @@ void chip8::execute_instruction(uint16_t instruction) {
         case 0xE:
             switch (val) {
                 case 0x9E:
-                    if (this->keyboard[a]) {
+                    if (this->keyboard[ind]) {
                         this->pc++;
                     }
                     break;
 
                 case 0xA1:
-                    if (!this->keyboard[a]) {
+                    if (!this->keyboard[ind]) {
                         this->pc++;
                     }
                     break;
             }
             break;
+
+        case 0xF:
+            switch (val) {
+                case 0x07:
+                    this->registers[ind] = this->delay;
+                    break;
+
+                case 0x0A:
+                    break;
+
+                case 0x15:
+                    this->delay = this->registers[ind];
+                    break;
+
+                case 0x18:
+                    this->sound = this->registers[ind];
+                    break;
+
+                case 0x1E:
+                    this->I = this->registers[ind] + this->I;
+                    break;
+
+                case 0x29:
+                    this->I = a * 5;
+                    break;
+
+                case 0x33:
+                    this->memory[this->I] = (this->registers[ind] / 100) % 10;
+                    this->memory[this->I + 1] = (this->registers[ind] / 10) % 10;
+                    this->memory[this->I + 2] = this->registers[ind] % 10;
+                    break;
+
+                case 0x55:
+                    for (uint8_t i = 0; i <= a; ++i) {
+                        this->memory[this->I + i] = this->registers[i];
+                    }
+                    break;
+                    
+                case 0x65:
+                    for (uint8_t i = 0; i <= a; ++i) {
+                        this->registers[i] = this->memory[this->I + i];
+                    }
+                    break;
+            }
+            break;
+
         default:
             std::cout << "unknown instruction " << instruction << std::endl;
-    }
-}
-
-void chip8::draw_sprite(uint8_t x, uint8_t y, bool *sprite, uint8_t size) {
-    uint8_t cx = x;
-    uint8_t cy = y;
-    this->registers[0xF] = 0;
-
-    for (uint8_t i = 0; i < size; ++i) {
-        bool old_pixel = this->display[cx][cy];
-        this->display[cx][cy] = this->display[cx][cy] ^ sprite[i]; 
-    
-        if (old_pixel == 1 && this->display[cx][cy] == 0) {
-            // if the pixel was erased, update the VF register
-            this->registers[0xF] = 1;
-        }
-
-        cx++;
-        if (cx == DISPLAY_WIDTH) {
-            cx = 0;
-            cy++;
-            if (cy == DISPLAY_HEIGHT) {
-                cy = 0;
-            }
-        }
-    }
-}
-
-void chip8::clear_display() {
-    for (uint8_t i = 0; i < DISPLAY_WIDTH; ++i) {
-        for (uint8_t j = 0; j < DISPLAY_HEIGHT; ++j) {
-            this->display[i][j] = 0;
-        }
-    }
-}
-
-void chip8::clear_keyboard() {
-    for (uint16_t i = 0; i < KEYS; ++i) {
-        this->keyboard[i] = 0;
-    }
-}
-
-void chip8::clear_memory() {
-    for (uint16_t i = 0; i < MEMORY_SIZE; ++i) {
-        this->memory[i] = 0;
-    }
-}
-
-void chip8::clear_stack() {
-    for (uint8_t i = 0; i < STACK_SIZE; ++i) {
-        this->stack[i] = 0;
-    }
-}
-
-void chip8::clear_registers() {
-    for (uint8_t i = 0; i < REGISTER_SIZE; ++i) {
-        this->registers[i] = 0;
+            break;
     }
 }
 
