@@ -3,14 +3,17 @@
 class peripherals {
     SDL_Window *window;
     SDL_Renderer *renderer;
+    SDL_Texture *texture;
 
-    int width;
-    int height;
+    uint32_t *display;
+    int display_width;
+    int display_height;
+    int pitch;
 
 public:
-    void draw_display(bool **display, uint8_t display_width, uint8_t display_height);
-    bool process_input(bool *keyboard, uint8_t num_keys);
+    void draw_display(bool **display, int display_width, int display_height);
+    bool process_input(bool *keyboard);
 
-    peripherals();        
+    peripherals(int window_width, int window_height, int display_width, int display_height);        
     ~peripherals();
 };

@@ -10,7 +10,7 @@ chip8::chip8() {
     }
     this->keyboard = new bool[NUM_KEYS];
 
-    distribution = std::uniform_int_distribution<int> (0x0, 0xFF);
+    this->distribution = std::uniform_int_distribution<int> (0x0, 0xFF);
 
     this->initialize();
 }
@@ -21,6 +21,7 @@ void chip8::initialize() {
     this->clear_display();
     this->clear_keyboard();
     this->clear_memory();
+    this->load_font();
     this->clear_stack();
     this->clear_registers();
 
@@ -69,9 +70,36 @@ bool chip8::load_program(std::string filename) {
     return true;
 }
 
+void chip8::load_font() {
+    uint8_t font [16 * 5] = {
+        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+        0x20, 0x60, 0x20, 0x20, 0x70, // 1
+        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+        0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+    };
+
+    for (uint8_t i = 8; i < 16 * 5; ++i) {
+        this->memory[i] = font[i];
+    }
+}
+
 void chip8::execute_cycle() {
     uint16_t instruction = (this->memory[this->pc] << 8) | 
                             this->memory[this->pc + 1];    
+
+    // std::cout << std::hex << instruction << std::endl;
     
     // increment program counter
     this->pc += 2;
@@ -95,8 +123,8 @@ void chip8::draw_sprite(uint8_t x, uint8_t y, uint8_t *sprite, uint8_t size) {
     for (uint8_t i = 0; i < size; ++i) {
         for (uint8_t j = 0; j < 8; ++j) {
             bool pixel = (sprite[i] >> (7 - j)) & 0x01;
-            uint8_t pos_x = x + j >= DISPLAY_WIDTH ? x + j - DISPLAY_WIDTH : x + j;
-            uint8_t pos_y = y + i >= DISPLAY_HEIGHT ? y + i - DISPLAY_HEIGHT : y + i;
+            uint8_t pos_x = (x + j) % DISPLAY_WIDTH;
+            uint8_t pos_y = (y + i) % DISPLAY_HEIGHT;
             
             if (this->display[pos_x][pos_y] && pixel) {
                 this->registers[0xF] = 1; // pixel is erased
@@ -105,7 +133,7 @@ void chip8::draw_sprite(uint8_t x, uint8_t y, uint8_t *sprite, uint8_t size) {
             pixel = pixel ^ this->display[pos_x][pos_y];
             if (pixel != this->display[pos_x][pos_y]) {
                 // pixel at pos_x,pos_y changed
-                this->draw = true;
+                this->set_draw_flag(true);
             }
 
             this->display[pos_x][pos_y] = pixel;
@@ -121,6 +149,15 @@ void chip8::clear_display() {
     }
     // draw the display
     this->draw = true;
+}
+
+void chip8::draw_display() {
+    for (uint8_t i = 0; i < DISPLAY_HEIGHT; ++i) {
+        for (uint8_t j = 0; j < DISPLAY_WIDTH; ++j) {
+            std::cout << this->display[j][i];
+        }
+        std::cout << std::endl;
+    }
 }
 
 bool **chip8::get_display() {
@@ -164,16 +201,14 @@ void chip8::clear_registers() {
 }
 
 void chip8::execute_instruction(uint16_t instruction) {
-    std::cout << std::hex << instruction << std::endl;
-
     uint8_t msb = instruction >> 12;
 
     // make unique vals that are shifted and ready to be used
-    uint8_t ind = 0x0F & (instruction >> 8);
-    uint8_t val = 0x00FF & instruction;
-    uint8_t a = ind;
-    uint8_t b = 0x00F & (instruction >> 4);
-    uint8_t tail = 0x000F & instruction;
+    uint8_t ind = 0x0F & (instruction >> 8); // 0X00
+    uint8_t val = 0x00FF & instruction;      // 00XX
+    uint8_t a = ind;                         // 0X00
+    uint8_t b = 0x00F & (instruction >> 4);  // 00X0
+    uint8_t tail = 0x000F & instruction;     // 000X
 
     switch (msb) {
         case 0:
@@ -184,18 +219,27 @@ void chip8::execute_instruction(uint16_t instruction) {
                 case 0x0EE:
                     this->sp--;
                     this->pc = this->stack[this->sp];
+                    if (this->pc % 2 == 1) {
+                        std::cout << "0" << std::endl;
+                    }
                     break;
             }
             break;
 
         case 1:
             this->pc = 0x0FFF & instruction;
+            if (this->pc % 2 == 1) {
+                std::cout << "1" << std::endl;
+            }
             break;
 
         case 2:
             this->stack[sp] = this->pc;
             this->sp++;
             this->pc = 0x0FFF & instruction;
+            if (this->pc % 2 == 1) {
+                std::cout << "2" << std::endl;
+            }
             break;
 
         case 3:
@@ -222,6 +266,7 @@ void chip8::execute_instruction(uint16_t instruction) {
 
         case 7:
             this->registers[ind] += val;
+            this->registers[ind] = this->registers[ind] % 0x100;
             break;
 
         case 8:
@@ -241,8 +286,8 @@ void chip8::execute_instruction(uint16_t instruction) {
                 case 4:
                 {
                     uint16_t res = this->registers[a] + this->registers[b];
-                    this->registers[a] = res & 0x00FF;
-                    this->registers[0xF] = bool(res >> 8);
+                    this->registers[0xF] = res > 0x100;
+                    this->registers[a] = res % 0x100;
                     break;
                 }
                 case 5:
@@ -250,7 +295,7 @@ void chip8::execute_instruction(uint16_t instruction) {
                     this->registers[a] -= this->registers[b];
                     break;
                 case 6:
-                    this->registers[0xF] = this->registers[ind] & 0x01;
+                    this->registers[0xF] = this->registers[ind] & 0x1;
                     this->registers[ind] = this->registers[ind] >> 1;
                     break;
                 case 7:
@@ -276,11 +321,13 @@ void chip8::execute_instruction(uint16_t instruction) {
 
         case 0xB:
             this->pc = this->registers[0] + (0x0FFF & instruction);
+            if (this->pc % 2 == 1) {
+                std::cout << "B" << std::endl;
+            }
             break;
 
         case 0xC:
-            // replace 1 with random byte
-            this->registers[ind] = (uint8_t) this->distribution(this->generator);
+            this->registers[ind] = ((uint8_t) this->distribution(this->generator)) & val;
             break;
 
         case 0xD:
@@ -300,14 +347,14 @@ void chip8::execute_instruction(uint16_t instruction) {
         case 0xE:
             switch (val) {
                 case 0x9E:
-                    if (this->keyboard[ind]) {
-                        this->pc++;
+                    if (this->keyboard[ind] == 1) {
+                        this->pc += 2;
                     }
                     break;
 
                 case 0xA1:
-                    if (!this->keyboard[ind]) {
-                        this->pc++;
+                    if (this->keyboard[ind] == 0) {
+                        this->pc += 2;
                     }
                     break;
             }
@@ -319,8 +366,22 @@ void chip8::execute_instruction(uint16_t instruction) {
                     this->registers[ind] = this->delay;
                     break;
 
-                case 0x0A:
+                case 0x0A: 
+                {
+                    bool set_key = false;
+                    for (uint8_t i = 0; i < NUM_KEYS; ++i) {
+                        if (this->keyboard[i] == 1) {
+                            this->registers[ind] = i;
+                            set_key = true;
+                            break;
+                        }
+                    }
+
+                    if (!set_key) {
+                        this->pc -= 2;
+                    }
                     break;
+                }
 
                 case 0x15:
                     this->delay = this->registers[ind];
@@ -373,7 +434,5 @@ chip8::~chip8() {
         delete[] this->display[i];
     }
     delete[] this->display;
-
-
 }
 

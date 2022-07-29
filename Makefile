@@ -1,10 +1,10 @@
 CC = g++
 
-CFLAGS = -g -Wall
+CFLAGS = -std=c++0x -g -Wall
 
 all: emulator
 
-emulator: emulator.o chip-8.o peripherals.o 
+emulator: emulator.o chip-8.o peripherals.o
 	$(CC) $(CFLAGS) -o emulator emulator.o chip-8.o peripherals.o -I include -L lib -l SDL2-2.0.0
 
 emulator.o: emulator.cpp
