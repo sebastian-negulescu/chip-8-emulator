@@ -2,3 +2,6 @@ emulator
 emulator.dSYM
 *.o
 *.ch8
+*.DS_Store
+
+roms/*

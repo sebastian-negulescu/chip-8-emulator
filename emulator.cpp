@@ -3,10 +3,11 @@
 #include <chrono>
 
 int main() {
-    chip8 cpu;
+    chip8 cpu{};
     peripherals peripherals{DISPLAY_WIDTH * 10, DISPLAY_HEIGHT * 10, DISPLAY_WIDTH, DISPLAY_HEIGHT};
+    int pitch = sizeof(cpu.display[0]) * DISPLAY_WIDTH;
 
-    bool loaded = cpu.load_program("glitchGhost.ch8");
+    bool loaded = cpu.load_program("./roms/glitchGhost.ch8");
 
     if (!loaded) {
         return -1;
@@ -15,24 +16,26 @@ int main() {
     bool quit = false;
     std::chrono::high_resolution_clock::time_point previous_time = std::chrono::high_resolution_clock::now();
     std::chrono::high_resolution_clock::time_point current_time;
-    double clock_cycle = 60; // hz
+    double clock_cycle = 1;
 
     while (!quit) { 
-        quit = peripherals.process_input(cpu.get_keyboard());
         if (quit) {
             continue;
         }
+        
+        quit = peripherals.process_input(cpu.keyboard);
 
         current_time = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> dt = std::chrono::duration_cast< std::chrono::duration<double> >(current_time - previous_time);
-        if (dt.count() >= 1/clock_cycle) {
-            cpu.execute_cycle();
+        float dt = std::chrono::duration<float, std::chrono::milliseconds::period>(current_time - previous_time).count();
+        if (dt > clock_cycle) {
             previous_time = current_time;
+            cpu.execute_cycle();
         }
 
-        if (cpu.get_draw_flag()) {
-            peripherals.draw_display(cpu.get_display(), DISPLAY_WIDTH, DISPLAY_HEIGHT);
-            cpu.set_draw_flag(false);
+        if (cpu.draw) {
+            peripherals.draw_display(cpu.display, pitch);
+            cpu.draw = false;
         }
+
     }
 }

@@ -1,15 +1,8 @@
 #include "peripherals.h"
 #include <iostream>
 
-void peripherals::draw_display(bool **processor_display, int display_width, int display_height) {
-    // need to convert display to uint32_t
-    for (int i = 0; i < this->display_height; ++i) {
-        for (int j = 0; j < this->display_width; ++j) {
-            this->display[i * this->display_width + j] = 0xFFFFFFFF * processor_display[j][i];
-        }
-    }
-
-    SDL_UpdateTexture(this->texture, nullptr, this->display, this->pitch);
+void peripherals::draw_display(void *const display, int pitch) {
+    SDL_UpdateTexture(this->texture, nullptr, display, pitch);
     SDL_RenderClear(this->renderer);
 	SDL_RenderCopy(this->renderer, this->texture, nullptr, nullptr);
 	SDL_RenderPresent(this->renderer);
@@ -29,52 +22,52 @@ bool peripherals::process_input(bool *keyboard) {
             case SDL_KEYDOWN:
                 switch (event.key.keysym.sym) {
                     case SDLK_1:
-                        keyboard[0x1] = 1;
+                        keyboard[1] = 1;
                         break;
                     case SDLK_2:
-                        keyboard[0x2] = 1;
+                        keyboard[2] = 1;
                         break;
                     case SDLK_3:
-                        keyboard[0x3] = 1;
+                        keyboard[3] = 1;
                         break;
                     case SDLK_4:
-                        keyboard[0xC] = 1;
+                        keyboard[12] = 1;
                         break;
                     case SDLK_q:
-                        keyboard[0x4] = 1;
+                        keyboard[4] = 1;
                         break;
                     case SDLK_w:
-                        keyboard[0x5] = 1;
+                        keyboard[5] = 1;
                         break;
                     case SDLK_e:
-                        keyboard[0x6] = 1;
+                        keyboard[6] = 1;
                         break;
                     case SDLK_r:
-                        keyboard[0xD] = 1;
+                        keyboard[13] = 1;
                         break;
                     case SDLK_a:
-                        keyboard[0x7] = 1;
+                        keyboard[7] = 1;
                         break;
                     case SDLK_s:
-                        keyboard[0x8] = 1;
+                        keyboard[8] = 1;
                         break;
                     case SDLK_d:
-                        keyboard[0x9] = 1;
+                        keyboard[9] = 1;
                         break;
                     case SDLK_f:
-                        keyboard[0xE] = 1;
+                        keyboard[14] = 1;
                         break;
                     case SDLK_z:
-                        keyboard[0xA] = 1;
+                        keyboard[10] = 1;
                         break;
                     case SDLK_x:
-                        keyboard[0x0] = 1;
+                        keyboard[0] = 1;
                         break;
                     case SDLK_c:
-                        keyboard[0xB] = 1;
+                        keyboard[11] = 1;
                         break;
                     case SDLK_v:
-                        keyboard[0xF] = 1;
+                        keyboard[15] = 1;
                         break;
                 }
                 break;
@@ -142,13 +135,11 @@ peripherals::peripherals(int window_width, int window_height, int display_width,
 
     this->display_width = display_width;
     this->display_height = display_height;
-    this->display = new uint32_t[display_width * display_height];
-    this->pitch = sizeof(this->display[0]) * this->display_width;
 
     this->window = SDL_CreateWindow(
         "chip 8 emulator",
-        SDL_WINDOWPOS_UNDEFINED,
-        SDL_WINDOWPOS_UNDEFINED,
+        0,
+        0,
         window_width,
         window_height,
         SDL_WINDOW_SHOWN
@@ -165,12 +156,9 @@ peripherals::peripherals(int window_width, int window_height, int display_width,
         display_width, 
         display_height
     );
-
 }
 
 peripherals::~peripherals() {
-    delete[] this->display;
-
     SDL_DestroyRenderer(this->renderer);
     SDL_DestroyWindow(this->window);
     SDL_DestroyTexture(this->texture);
