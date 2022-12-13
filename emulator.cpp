@@ -1,15 +1,25 @@
 #include "chip-8.h"
 #include "peripherals.h"
 #include <chrono>
+#include <iostream>
 
-int main() {
+int main(int argc, char* argv[]) {
     chip8 cpu{};
     peripherals peripherals{DISPLAY_WIDTH * 10, DISPLAY_HEIGHT * 10, DISPLAY_WIDTH, DISPLAY_HEIGHT};
     int pitch = sizeof(cpu.display[0]) * DISPLAY_WIDTH;
 
-    bool loaded = cpu.load_program("./roms/glitchGhost.ch8");
+    if (argc < 2) {
+        std::cerr << "must specify input file" << std::endl;
+        return -1;
+    }
+    if (argc > 2) {
+        std::cerr << "too many arguments" << std::endl;
+        return -1;
+    }
+    bool loaded = cpu.load_program(argv[1]);
 
     if (!loaded) {
+        std::cerr << "could not open input file" << std::endl;
         return -1;
     }
 
